@@ -71,7 +71,6 @@ The indicator is popular for its simplicity and effectiveness in identifying tre
 ## License
 
 MIT License - Free to use and modify
-```
 
 ```
 //@version=5
