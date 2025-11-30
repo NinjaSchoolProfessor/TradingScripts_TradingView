@@ -64,10 +64,6 @@ The indicator is popular for its simplicity and effectiveness in identifying tre
 - Consider combining with other confirmation indicators (RSI, MACD, volume)
 - Not financial advice—always backtest before live trading
 
-## Screenshots
-
-*Add screenshots of the indicator on a chart here*
-
 ## License
 
 MIT License - Free to use and modify
