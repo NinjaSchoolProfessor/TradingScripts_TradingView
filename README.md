@@ -435,6 +435,7 @@ indicator("VIDYA Trend [SuperTrend Style]", overlay=true)
 // Inputs
 vidya_length = input.int(10, "VIDYA Length", minval=1)
 vidya_momentum = input.int(20, "VIDYA Momentum", minval=1)
+band_distance = input.float(2.2, "Band Distance", minval=0.1, step=0.1)
 source = input.source(close, "Source")
 
 // VIDYA Calculation Function
@@ -451,15 +452,22 @@ vidya_calc(src, length, momentum_len) =>
 // Calculate VIDYA
 vidya = vidya_calc(source, vidya_length, vidya_momentum)
 
-// Trend Detection
-var int trend = 1
-trend := close > vidya ? 1 : close < vidya ? -1 : trend[1]
+// ATR for band calculation (used for trend detection, not plotted)
+atr = ta.atr(14)
+upper_band = vidya + (band_distance * atr)
+lower_band = vidya - (band_distance * atr)
 
-// Buy/Sell Signals
+// Trend Detection (SuperTrend-style logic using bands)
+var int trend = 1
+trend := trend == -1 and close > upper_band ? 1 : 
+         trend == 1 and close < lower_band ? -1 : 
+         trend
+
+// Buy/Sell Signals (only on trend flips)
 buySignal = trend == 1 and trend[1] == -1
 sellSignal = trend == -1 and trend[1] == 1
 
-// Plot VIDYA Line Only (no bands)
+// Plot VIDYA Line Only (color based on trend)
 vidya_color = trend == 1 ? color.rgb(0, 255, 255) : color.rgb(255, 0, 255)  // Cyan for up, Magenta for down
 plot(vidya, "VIDYA", color=vidya_color, linewidth=2)
 
