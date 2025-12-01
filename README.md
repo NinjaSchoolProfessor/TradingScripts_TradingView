@@ -445,7 +445,7 @@ Inspired by the original [Volumatic VIDYA by BigBeluga](https://www.tradingview.
 
 ```
 //@version=6
-indicator("VIDYA Trend [SuperTrend Style]", overlay=true)
+indicator("VIDYA Trend", overlay=true)
 
 // Inputs
 vidya_length = input.int(10, "VIDYA Length", minval=1)
