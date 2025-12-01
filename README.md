@@ -429,147 +429,65 @@ Positive delta indicates net buying pressure; negative delta indicates net selli
 Inspired by the original [Volumatic VIDYA by BigBeluga](https://www.tradingview.com/script/llhVjhA5-Volumatic-Variable-Index-Dynamic-Average-BigBeluga/).
 
 ```
-//@version=5
-indicator("Volumatic VIDYA", overlay=true, max_lines_count=500, max_labels_count=500)
+//@version=6
+indicator("VIDYA Trend [SuperTrend Style]", overlay=true)
 
 // Inputs
-vidyaLength = input.int(10, "VIDYA Length", minval=1)
-vidyaMomentum = input.int(20, "VIDYA Momentum", minval=1)
-pivotLength = input.int(5, "Pivot Length", minval=1)
-bandMult = input.float(2.0, "Band Distance (ATR Multiplier)", minval=0.1, step=0.1)
-atrLength = input.int(14, "ATR Length", minval=1)
+vidya_length = input.int(10, "VIDYA Length", minval=1)
+vidya_momentum = input.int(20, "VIDYA Momentum", minval=1)
+source = input.source(close, "Source")
 
-// Colors
-bullColor = input.color(color.rgb(0, 230, 118), "Bullish Color")
-bearColor = input.color(color.rgb(255, 82, 82), "Bearish Color")
-
-// VIDYA Calculation
-vidya_calc(src, vidya_length, vidya_momentum) =>
+// VIDYA Calculation Function
+vidya_calc(src, length, momentum_len) =>
     float momentum = ta.change(src)
-    float sum_pos_momentum = math.sum(momentum >= 0 ? momentum : 0.0, vidya_momentum)
-    float sum_neg_momentum = math.sum(momentum >= 0 ? 0.0 : -momentum, vidya_momentum)
-    float abs_cmo = math.abs(100 * (sum_pos_momentum - sum_neg_momentum) / (sum_pos_momentum + sum_neg_momentum))
-    float alpha = 2 / (vidya_length + 1)
-    var float vidya_value = 0.0
-    vidya_value := alpha * abs_cmo / 100 * src + (1 - alpha * abs_cmo / 100) * nz(vidya_value[1])
-    ta.sma(vidya_value, 15)
+    float sum_pos = math.sum((momentum >= 0) ? momentum : 0.0, momentum_len)
+    float sum_neg = math.sum((momentum >= 0) ? 0.0 : -momentum, momentum_len)
+    float abs_cmo = math.abs(100 * (sum_pos - sum_neg) / (sum_pos + sum_neg))
+    float alpha = 2 / (length + 1)
+    var float vidya = 0.0
+    vidya := alpha * abs_cmo / 100 * src + (1 - alpha * abs_cmo / 100) * nz(vidya[1])
+    ta.sma(vidya, 15)
 
 // Calculate VIDYA
-vidya = vidya_calc(close, vidyaLength, vidyaMomentum)
-
-// ATR for bands
-atr = ta.atr(atrLength)
-upperBand = vidya + (atr * bandMult)
-lowerBand = vidya - (atr * bandMult)
+vidya = vidya_calc(source, vidya_length, vidya_momentum)
 
 // Trend Detection
 var int trend = 1
-trend := close > upperBand ? 1 : close < lowerBand ? -1 : trend
+trend := close > vidya ? 1 : close < vidya ? -1 : trend[1]
 
-// Trend Change Detection
-trendUp = trend == 1 and trend[1] == -1
-trendDown = trend == -1 and trend[1] == 1
+// Buy/Sell Signals
+buySignal = trend == 1 and trend[1] == -1
+sellSignal = trend == -1 and trend[1] == 1
 
-// Volume Pressure Calculation
-var float buyVolume = 0.0
-var float sellVolume = 0.0
+// Plot VIDYA Line Only (no bands)
+vidya_color = trend == 1 ? color.rgb(0, 255, 255) : color.rgb(255, 0, 255)  // Cyan for up, Magenta for down
+plot(vidya, "VIDYA", color=vidya_color, linewidth=2)
 
-if trendUp or trendDown
-    buyVolume := 0.0
-    sellVolume := 0.0
+// Buy Signal - Rectangle with Label
+if buySignal
+    box.new(bar_index, low * 0.998, bar_index + 3, low * 0.996, 
+             bgcolor=color.new(color.green, 80), 
+             border_color=color.green, 
+             border_width=2)
+    label.new(bar_index + 1, low * 0.997, "BUY", 
+              color=color.new(color.green, 100), 
+              textcolor=color.white, 
+              style=label.style_none, 
+              size=size.small)
 
-if trend == 1
-    if close > open
-        buyVolume += volume
-    else
-        sellVolume += volume
-else
-    if close < open
-        sellVolume += volume
-    else
-        buyVolume += volume
-
-deltaVolume = buyVolume - sellVolume
-
-// VIDYA Line Color
-vidyaColor = trend == 1 ? bullColor : bearColor
-
-// Plot VIDYA and Bands
-plot(vidya, "VIDYA", color=vidyaColor, linewidth=2)
-p1 = plot(upperBand, "Upper Band", color=color.new(vidyaColor, 70))
-p2 = plot(lowerBand, "Lower Band", color=color.new(vidyaColor, 70))
-fill(p1, p2, color=color.new(vidyaColor, 90))
-
-// Trend Shift Signals
-plotshape(trendUp, "Buy Signal", shape.triangleup, location.belowbar, bullColor, size=size.small)
-plotshape(trendDown, "Sell Signal", shape.triangledown, location.abovebar, bearColor, size=size.small)
-
-// Delta Volume Label
-var label deltaLabel = na
-if barstate.islast
-    label.delete(deltaLabel)
-    deltaStr = (deltaVolume >= 0 ? "+" : "") + str.tostring(deltaVolume, format.volume)
-    deltaLabel := label.new(bar_index + 2, vidya, "Δ " + deltaStr, 
-                           color=deltaVolume >= 0 ? bullColor : bearColor, 
-                           textcolor=color.white, 
-                           style=label.style_label_left,
-                           size=size.normal)
-
-// Market Structure Pivots with Volume
-pivotHigh = ta.pivothigh(high, pivotLength, pivotLength)
-pivotLow = ta.pivotlow(low, pivotLength, pivotLength)
-
-var line[] pivotLines = array.new_line()
-var label[] pivotLabels = array.new_label()
-
-// Average volume at pivot
-avgVol(idx) =>
-    math.avg(volume[idx], volume[idx+1], volume[idx+2], volume[idx+3], volume[idx+4], volume[idx+5])
-
-// Pivot High Line
-if not na(pivotHigh)
-    // Remove lines that price has crossed
-    for i = array.size(pivotLines) - 1 to 0
-        ln = array.get(pivotLines, i)
-        if not na(ln)
-            linePrice = line.get_y1(ln)
-            if close > linePrice and line.get_color(ln) == bearColor
-                line.delete(ln)
-                array.remove(pivotLines, i)
-            else if close < linePrice and line.get_color(ln) == bullColor
-                line.delete(ln)
-                array.remove(pivotLines, i)
-    
-    newLine = line.new(bar_index - pivotLength, pivotHigh, bar_index + 20, pivotHigh, 
-                       color=bearColor, style=line.style_dotted, width=1)
-    array.push(pivotLines, newLine)
-    
-    volAtPivot = avgVol(pivotLength)
-    volLabel = label.new(bar_index - pivotLength, pivotHigh, str.tostring(volAtPivot, format.volume), 
-                         color=color.new(bearColor, 50), textcolor=color.white, 
-                         style=label.style_label_down, size=size.tiny)
-    array.push(pivotLabels, volLabel)
-
-// Pivot Low Line
-if not na(pivotLow)
-    newLine = line.new(bar_index - pivotLength, pivotLow, bar_index + 20, pivotLow, 
-                       color=bullColor, style=line.style_dotted, width=1)
-    array.push(pivotLines, newLine)
-    
-    volAtPivot = avgVol(pivotLength)
-    volLabel = label.new(bar_index - pivotLength, pivotLow, str.tostring(volAtPivot, format.volume), 
-                         color=color.new(bullColor, 50), textcolor=color.white, 
-                         style=label.style_label_up, size=size.tiny)
-    array.push(pivotLabels, volLabel)
-
-// Extend pivot lines
-if barstate.islast
-    for i = 0 to array.size(pivotLines) - 1
-        ln = array.get(pivotLines, i)
-        if not na(ln)
-            line.set_x2(ln, bar_index + 20)
+// Sell Signal - Rectangle with Label
+if sellSignal
+    box.new(bar_index, high * 1.002, bar_index + 3, high * 1.004, 
+             bgcolor=color.new(color.red, 80), 
+             border_color=color.red, 
+             border_width=2)
+    label.new(bar_index + 1, high * 1.003, "SELL", 
+              color=color.new(color.red, 100), 
+              textcolor=color.white, 
+              style=label.style_none, 
+              size=size.small)
 
 // Alerts
-alertcondition(trendUp, "VIDYA Bullish", "Volumatic VIDYA turned bullish")
-alertcondition(trendDown, "VIDYA Bearish", "Volumatic VIDYA turned bearish")
+alertcondition(buySignal, "VIDYA Buy", "VIDYA trend turned bullish")
+alertcondition(sellSignal, "VIDYA Sell", "VIDYA trend turned bearish")
 ```
