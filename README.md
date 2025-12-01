@@ -159,13 +159,13 @@ alertcondition(sellSignal, title = 'SuperTrend Sell', message = 'SuperTrend Sell
 ```
 
 # Trend Magic
-A Pine Script implementation of the Trend Magic indicator with buy/sell signals.
+A Pine Script v6 implementation of the Trend Magic indicator with buy/sell signals, matching the ThinkOrSwim version.
 
 ## What is Trend Magic?
 
 Trend Magic is a trend-following indicator that combines the Commodity Channel Index (CCI) for direction detection with Average True Range (ATR) for dynamic trailing levels. It plots a single line that trails price and changes color based on trend direction:
 
-- **Green line below price** = Uptrend (bullish)
+- **Blue line below price** = Uptrend (bullish)
 - **Red line above price** = Downtrend (bearish)
 
 The indicator excels at identifying trend reversals earlier than purely price-based indicators by using momentum (CCI) as its directional trigger.
@@ -174,14 +174,17 @@ The indicator excels at identifying trend reversals earlier than purely price-ba
 
 ### Calculation
 
-1. **CCI Calculation**: Measures price deviation from its statistical mean
+1. **Custom CCI Calculation**: Uses close price only (not typical price) with manual calculation:
+   - `SMA = Simple Moving Average of close`
+   - `MAD = Mean Absolute Deviation from SMA`
+   - `CCI = (close - SMA) / (0.015 × MAD)`
 2. **ATR Calculation**: Measures average price volatility over a specified period
 3. **Trend Direction**:
    - CCI ≥ 0 = Bullish
    - CCI < 0 = Bearish
 4. **Trend Magic Line**:
-   - Uptrend: `Low - (ATR × Multiplier)` — ratchets upward only
-   - Downtrend: `High + (ATR × Multiplier)` — ratchets downward only
+   - Uptrend: `Low - (ATR × Multiplier)` — ratchets upward using max() logic
+   - Downtrend: `High + (ATR × Multiplier)` — ratchets downward using min() logic
 
 ### Signal Logic
 
@@ -195,7 +198,7 @@ The indicator excels at identifying trend reversals earlier than purely price-ba
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | CCI Period | 20 | Lookback period for CCI calculation |
-| ATR Period | 20 | Lookback period for ATR calculation |
+| ATR Period | 5 | Lookback period for ATR calculation |
 | ATR Multiplier | 1.0 | Distance multiplier for the trailing line |
 
 ### Parameter Tuning
@@ -208,10 +211,11 @@ The indicator excels at identifying trend reversals earlier than purely price-ba
 ## Features
 
 - Overlay indicator (plots directly on price chart)
-- Color-coded trend line (green = bullish, red = bearish)
-- Visual buy/sell bubbles with labels at trend reversals
+- Color-coded trend line (blue = bullish, red = bearish)
+- Visual buy/sell bubbles with labels at trend reversals (green/red markers)
 - Built-in alert conditions for automated notifications
-- Ratcheting logic prevents premature signal flips
+- Continuous ratcheting logic prevents premature signal flips
+- **Exact logic match with ThinkOrSwim implementation**
 
 ## Installation
 
@@ -228,6 +232,15 @@ The indicator excels at identifying trend reversals earlier than purely price-ba
 | **Responsiveness** | Reacts to price action | Reacts to momentum shift |
 | **False Signals** | More in choppy markets | Fewer due to CCI smoothing |
 | **Band Anchor** | HL2 (midpoint) | High/Low extremes |
+| **CCI Calculation** | N/A | Custom using close only |
+
+## Implementation Notes
+
+- **Pine Script v6** compatible
+- Custom CCI calculation uses close price only (not typical price HLC/3) to match TOS
+- Continuous max/min ratcheting logic (no reset on trend changes)
+- ATR period default of 5 matches ThinkOrSwim version
+- Line weight set to 3 for visibility
 
 ## Usage Notes
 
