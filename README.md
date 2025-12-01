@@ -238,43 +238,45 @@ The indicator excels at identifying trend reversals earlier than purely price-ba
 - Not financial advice—always backtest before live trading
 
 ```
-//@version=5
+//@version=6
 indicator("Trend Magic", overlay=true)
 
 // Inputs
 cciPeriod = input.int(20, "CCI Period", minval=1)
-atrPeriod = input.int(20, "ATR Period", minval=1)
+atrPeriod = input.int(5, "ATR Period", minval=1)  // Changed from 20 to match TOS default
 atrMult = input.float(1.0, "ATR Multiplier", minval=0.1, step=0.1)
 
-// CCI and ATR Calculation
-cci = ta.cci(close, cciPeriod)
+// Manual CCI Calculation (matching TOS exactly - uses close, not typical price)
+tp = close
+sma = ta.sma(tp, cciPeriod)
+mad = ta.sma(math.abs(tp - sma), cciPeriod)
+cci = (tp - sma) / (0.015 * mad)
+
+// ATR Calculation
 atr = ta.atr(atrPeriod)
 
-// Trend Direction based on CCI
-var int trend = 1
-trend := cci >= 0 ? 1 : -1
-
-// Trend Magic Line Calculation
+// Bands
 upLine = low - (atr * atrMult)
 downLine = high + (atr * atrMult)
 
-var float trendMagic = na
-trendMagic := trend == 1 ? math.max(nz(trendMagic[1]), upLine) : math.min(nz(trendMagic[1]), downLine)
+// Trend Magic Line (matching TOS CompoundValue logic exactly)
+var float trendMagic = close
+trendMagic := cci >= 0 ? math.max(trendMagic[1], upLine) : math.min(trendMagic[1], downLine)
 
-// Reset on trend change
-trendMagic := trend != trend[1] ? (trend == 1 ? upLine : downLine) : trendMagic
-
-// Colors
-lineColor = trend == 1 ? color.green : color.red
+// Colors (blue/red to match TOS)
+lineColor = cci >= 0 ? color.blue : color.red
 
 // Plot Trend Magic Line
-plot(trendMagic, "Trend Magic", color=lineColor, linewidth=2, style=plot.style_line)
+plot(trendMagic, "Trend Magic", color=lineColor, linewidth=3)
+
+// Trend for signals
+trend = cci >= 0 ? 1 : -1
 
 // Buy/Sell Signals
 buySignal = trend == 1 and trend[1] == -1
 sellSignal = trend == -1 and trend[1] == 1
 
-// Buy/Sell Bubbles with Labels
+// Buy/Sell Markers
 plotshape(buySignal, "Buy", shape.circle, location.belowbar, color.green, size=size.normal, text="Buy", textcolor=color.white)
 plotshape(sellSignal, "Sell", shape.circle, location.abovebar, color.red, size=size.normal, text="Sell", textcolor=color.white)
 
