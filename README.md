@@ -77,56 +77,85 @@ The indicator is popular for its simplicity and effectiveness in identifying tre
 MIT License - Free to use and modify
 
 ```
-//@version=5
-indicator("Super Trend", overlay=true)
+//@version=6
+// Copyright (c) 2019-present, Alex Orekhov (everget)
+// SuperTrend script may be freely distributed under the terms of the GPL-3.0 license.
+indicator('SuperTrend', overlay = true)
 
-// Inputs
-atrPeriod = input.int(14, "ATR Period", minval=1)
-factor = input.float(2.0, "Factor", minval=0.1, step=0.1)
+const string calcGroup = 'Calculation'
+length = input.int(22, title = 'ATR Period', group = calcGroup)
+mult = input.float(3, step = 0.1, title = 'ATR Multiplier', group = calcGroup)
+src = input.source(hl2, title = 'Source', group = calcGroup)
+wicks = input.bool(true, title = 'Take Wicks into Account', group = calcGroup)
 
-// ATR Calculation
-atr = ta.atr(atrPeriod)
+const string visualGroup = 'Visuals'
+showLabels = input.bool(true, title = 'Show Buy/Sell Labels', group = visualGroup)
+highlightState = input.bool(true, title = 'Highlight State', group = visualGroup)
 
-// Basic Bands
-hl2_val = hl2
-upperBasic = hl2_val + (factor * atr)
-lowerBasic = hl2_val - (factor * atr)
+//---
 
-// Final Bands
-var float upperBand = na
-var float lowerBand = na
+atr = mult * ta.atr(length)
 
-upperBand := na(upperBand[1]) ? upperBasic : (upperBasic < upperBand[1] or close[1] > upperBand[1]) ? upperBasic : upperBand[1]
-lowerBand := na(lowerBand[1]) ? lowerBasic : (lowerBasic > lowerBand[1] or close[1] < lowerBand[1]) ? lowerBasic : lowerBand[1]
+highPrice = wicks ? high : close
+lowPrice = wicks ? low : close
+doji4price = open == close and open == low and open == high
 
-// Super Trend Direction
-var int direction = 1
-direction := na(direction[1]) ? 1 : 
-             direction[1] == -1 and close > upperBand[1] ? 1 : 
-             direction[1] == 1 and close < lowerBand[1] ? -1 : 
-             direction[1]
+longStop = src - atr
+longStopPrev = nz(longStop[1], longStop)
 
-// Super Trend Value
-superTrend = direction == 1 ? lowerBand : upperBand
+if longStop > 0
+    if doji4price
+        longStop := longStopPrev
+        longStop
+    else
+        longStop := lowPrice[1] > longStopPrev ? math.max(longStop, longStopPrev) : longStop
+        longStop
+else
+    longStop := longStopPrev
+    longStop
 
-// Plotting
-upTrend = direction == 1 ? superTrend : na
-downTrend = direction == -1 ? superTrend : na
+shortStop = src + atr
+shortStopPrev = nz(shortStop[1], shortStop)
 
-plot(upTrend, "Up Trend", color=color.green, linewidth=2, style=plot.style_linebr)
-plot(downTrend, "Down Trend", color=color.red, linewidth=2, style=plot.style_linebr)
+if shortStop > 0
+    if doji4price
+        shortStop := shortStopPrev
+        shortStop
+    else
+        shortStop := highPrice[1] < shortStopPrev ? math.min(shortStop, shortStopPrev) : shortStop
+        shortStop
+else
+    shortStop := shortStopPrev
+    shortStop
 
-// Buy/Sell Signals
-buySignal = direction == 1 and direction[1] == -1
-sellSignal = direction == -1 and direction[1] == 1
+var int dir = 1
+dir := dir == -1 and highPrice > shortStopPrev ? 1 : dir == 1 and lowPrice < longStopPrev ? -1 : dir
 
-// Buy/Sell Bubbles with Labels
-plotshape(buySignal, "Buy", shape.circle, location.belowbar, color.green, size=size.normal, text="Buy", textcolor=color.white)
-plotshape(sellSignal, "Sell", shape.circle, location.abovebar, color.red, size=size.normal, text="Sell", textcolor=color.white)
+const color textColor = color.white
+const color longColor = color.green
+const color shortColor = color.red
+const color longFillColor = color.new(color.green, 85)
+const color shortFillColor = color.new(color.red, 85)
 
-// Alerts
-alertcondition(buySignal, "Super Trend Buy", "Super Trend flipped bullish")
-alertcondition(sellSignal, "Super Trend Sell", "Super Trend flipped bearish")
+longStopPlot = plot(dir == 1 ? longStop : na, title = 'Long Stop', style = plot.style_linebr, linewidth = 2, color = longColor)
+buySignal = dir == 1 and dir[1] == -1
+plotshape(buySignal ? longStop : na, title = 'Long Stop Start', location = location.absolute, style = shape.circle, size = size.tiny, color = longColor)
+plotshape(buySignal and showLabels ? longStop : na, title = 'Buy Label', text = 'Buy', location = location.absolute, style = shape.labelup, size = size.tiny, color = longColor, textcolor = textColor)
+
+shortStopPlot = plot(dir == 1 ? na : shortStop, title = 'Short Stop', style = plot.style_linebr, linewidth = 2, color = shortColor)
+sellSignal = dir == -1 and dir[1] == 1
+plotshape(sellSignal ? shortStop : na, title = 'Short Stop Start', location = location.absolute, style = shape.circle, size = size.tiny, color = shortColor)
+plotshape(sellSignal and showLabels ? shortStop : na, title = 'Sell Label', text = 'Sell', location = location.absolute, style = shape.labeldown, size = size.tiny, color = shortColor, textcolor = textColor)
+
+midPricePlot = plot(ohlc4, title = '', display = display.none, editable = false)
+
+fill(midPricePlot, longStopPlot, title = 'Long State Filling', color = (highlightState and dir == 1 ? longFillColor : na))
+fill(midPricePlot, shortStopPlot, title = 'Short State Filling', color = (highlightState and dir == -1 ? shortFillColor : na))
+
+alertcondition(dir != dir[1], title = 'SuperTrend Direction Change', message = 'SuperTrend has changed direction, {{exchange}}:{{ticker}}')
+alertcondition(buySignal, title = 'SuperTrend Buy', message = 'SuperTrend Buy, {{exchange}}:{{ticker}}')
+alertcondition(sellSignal, title = 'SuperTrend Sell', message = 'SuperTrend Sell, {{exchange}}:{{ticker}}')
+
 ```
 
 # Trend Magic
